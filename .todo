@@ -1,0 +1,17 @@
+- dashboard
+  - person
+    - CRUD
+
+- lineage
+  - graph
+  - open the person
+  - apply a report
+  - suggest addition
+  - apply colors
+- person
+  - show the details
+  - show parents and children
+
+- ai auto generating 
+  - mcp
+  - prompts

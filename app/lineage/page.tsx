@@ -170,7 +170,10 @@ export default function LineagePage() {
           zoomOnPinch
         >
           <Background />
-          <MiniMap nodeColor={(n) => (n.style as any)?.backgroundColor || '#eee'} />
+          <MiniMap 
+            nodeColor={(n) => (n.style as any)?.backgroundColor || '#eee'} 
+            
+          />
           <Controls />
         </ReactFlow>
       </div>
