@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/* ===== Enums ===== */
+enum PersonType {
+  PERSON
+  PROPHET
+  MESSENGER
+  MESSENGER_PROPHET
+}
+
+enum ModerationStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum Role {
+  ADMIN
+  MODERATOR
+  USER
+}
+
+/* ===== Users (admins/moderators) ===== */
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  role         Role     @default(USER)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  createdPeople Person[] @relation("PersonCreatedBy")
+  updatedPeople Person[] @relation("PersonUpdatedBy")
+}
+
+/* ===== People (single table; supports variants by narration) ===== */
+model Person {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  name      String
+  type      PersonType @default(PERSON)   // <<--- added this
+
+  // Optional metadata
+  kunya     String?
+  laqab     String?
+  birthYear Int?
+  deathYear Int?
+  gender    String?
+
+  // Canonical parent links shown on the public graph
+  fatherId  String?
+  motherId  String?
+  father    Person?  @relation("CanonicalFather", fields: [fatherId], references: [id])
+  mother    Person?  @relation("CanonicalMother", fields: [motherId], references: [id])
+  childrenAsFather Person[] @relation("CanonicalFather")
+  childrenAsMother Person[] @relation("CanonicalMother")
+
+  // Variant support:
+  // - Put variants of the same individual under one group key.
+  // - narration can hold "Ibn Hisham", "Ibn Ishaq", etc.
+  // - Mark one row per group as isCanonical=true for the public view.
+  variantGroup String?   // e.g., "prophet-muhammad"
+  narration    String?   // free text label of narration
+  isCanonical  Boolean   @default(true)
+
+  biographyMd String?
+  status      ModerationStatus @default(PENDING_REVIEW)
+
+  // audit
+  createdById String?
+  updatedById String?
+  createdBy   User?    @relation("PersonCreatedBy", fields: [createdById], references: [id])
+  updatedBy   User?    @relation("PersonUpdatedBy", fields: [updatedById], references: [id])
+
+  // links & user feedback
+  reports       Report[]
+  approvedFromSubmissions Submission[] @relation("SubmissionApprovedPerson")
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status])
+  @@index([fatherId])
+  @@index([motherId])
+  @@index([variantGroup])
+  @@index([isCanonical])
+}
+
+/* ===== Public error reports ===== */
+model Report {
+  id              String   @id @default(cuid())
+  personId        String?
+  person          Person?  @relation(fields: [personId], references: [id])
+
+  field           String?     // e.g., "fatherId", "birthYear"
+  currentValue    String?
+  suggestedValue  String?
+  sourceText      String?
+  message         String      // explanation
+
+  status          ModerationStatus @default(PENDING_REVIEW)
+  reporterEmail   String?
+  reporterIp      String?
+
+  createdAt       DateTime @default(now())
+  reviewedAt      DateTime?
+
+  @@index([personId])
+  @@index([status])
+}
+
+/* ===== Public submissions (add-lineage) ===== */
+model Submission {
+  id               String   @id @default(cuid())
+
+  name             String
+  fatherName       String?
+  motherName       String?
+  linkedFatherId   String?
+  linkedMotherId   String?
+  sourceText       String?
+  notes            String?
+
+  status           ModerationStatus @default(PENDING_REVIEW)
+  submittedByEmail String?
+  submittedIp      String?
+
+  // When approved, link to the created/updated Person
+  approvedPersonId String?
+  approvedPerson   Person?  @relation("SubmissionApprovedPerson", fields: [approvedPersonId], references: [id])
+
+  createdAt        DateTime @default(now())
+  reviewedAt       DateTime?
+
+  @@index([status])
+  @@index([approvedPersonId])
+}
